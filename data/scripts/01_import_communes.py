@@ -1,74 +1,84 @@
 """
-Importe les communes > 10 000 habitants depuis le fichier INSEE.
+Importe les communes >= 10 000 habitants depuis le fichier SSMSI.
+La population est extraite directement du fichier SSMSI (colonne insee_pop).
+Les noms des communes sont complétés depuis le fichier nuances politiques.
 
-Source : https://www.insee.fr/fr/information/2028028
-Télécharger : correspondance-code-insee-code-postal-commune-canton-2024.csv
-Placer dans : data/raw/communes_insee.csv
+Fichiers requis dans data/raw/ :
+  - ssmsi_all.csv.gz  (SSMSI data.gouv.fr)
+  - communes_nuances_2020.csv  (dataset communes enrichies data.gouv.fr)
 """
 import sys
-import pandas as pd
+import os
+import gzip
+import csv
 import psycopg2
 from tqdm import tqdm
 from config import DATABASE_URL
 
-CSV_PATH = "../raw/communes_insee.csv"
+RAW_DIR = os.path.join(os.path.dirname(__file__), '../raw')
+SSMSI_FILE = os.path.join(RAW_DIR, 'ssmsi_all.csv.gz')
+NUANCES_FILE = os.path.join(RAW_DIR, 'communes_nuances_2020.csv')
 POPULATION_MIN = 10_000
 
-def main():
-    print("Lecture du fichier communes INSEE...")
+def load_noms_communes():
+    """Charger le mapping code_insee -> nom depuis le fichier nuances."""
+    noms = {}
     try:
-        df = pd.read_csv(CSV_PATH, dtype=str, sep=";", encoding="utf-8")
+        with open(NUANCES_FILE, encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                code = row.get('cog_commune', '').strip().zfill(5)
+                nom = row.get('nom_commune', '').strip()
+                if code and nom:
+                    noms[code] = nom
+        print(f"  {len(noms)} noms de communes chargés depuis nuances")
     except FileNotFoundError:
-        print(f"ERREUR : fichier non trouvé : {CSV_PATH}")
-        print("Télécharger depuis : https://www.insee.fr/fr/information/2028028")
+        print(f"  AVERTISSEMENT : {NUANCES_FILE} non trouvé — noms de communes absents")
+    return noms
+
+def extract_communes_from_ssmsi():
+    """Extraire les communes + populations du fichier SSMSI."""
+    communes = {}  # code_insee -> {population, departement}
+    print("Lecture du fichier SSMSI pour extraire les communes...")
+    with gzip.open(SSMSI_FILE, 'rt', encoding='utf-8') as f:
+        reader = csv.DictReader(f, delimiter=';')
+        for row in reader:
+            code = row.get('CODGEO_2025', '').strip().zfill(5)
+            pop_str = row.get('insee_pop', '').strip()
+            if code and pop_str and pop_str.isdigit():
+                pop = int(pop_str)
+                if pop >= POPULATION_MIN:
+                    if code not in communes or communes[code]['population'] < pop:
+                        dep = code[:3] if code[:2] == '97' else code[:2]
+                        communes[code] = {'population': pop, 'departement': dep}
+    return communes
+
+def main():
+    if not os.path.exists(SSMSI_FILE):
+        print(f"ERREUR : {SSMSI_FILE} non trouvé")
         sys.exit(1)
 
-    print(f"Colonnes disponibles : {list(df.columns)}")
-
-    # Adapter selon les colonnes réelles du fichier INSEE
-    # Le fichier varie selon les années — renommer si nécessaire
-    col_map = {
-        "COM": "code_insee",
-        "LIBELLE": "nom",
-        "DEP": "departement",
-        "LIBDEP": "departement_nom",
-        "REG": "region",
-        "PMUN": "population",
-    }
-    df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
-
-    if "population" not in df.columns:
-        print("ERREUR : colonne population introuvable. Vérifier les colonnes ci-dessus.")
-        sys.exit(1)
-
-    df["population"] = pd.to_numeric(df["population"], errors="coerce").fillna(0).astype(int)
-    df = df[df["population"] >= POPULATION_MIN].copy()
-
-    print(f"{len(df)} communes > {POPULATION_MIN:,} habitants trouvées")
+    noms = load_noms_communes()
+    communes = extract_communes_from_ssmsi()
+    print(f"{len(communes)} communes >= {POPULATION_MIN:,} habitants trouvées dans le SSMSI")
 
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
 
     inserted = 0
-    for _, row in tqdm(df.iterrows(), total=len(df), desc="Import communes"):
+    for code_insee, data in tqdm(communes.items(), desc="Import communes"):
+        nom = noms.get(code_insee, f"Commune {code_insee}")
+        dep = data['departement']
+
         cur.execute("""
-            INSERT INTO communes (code_insee, nom, departement, departement_nom, region, population)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO communes (code_insee, nom, departement, population)
+            VALUES (%s, %s, %s, %s)
             ON CONFLICT (code_insee) DO UPDATE SET
                 nom = EXCLUDED.nom,
                 departement = EXCLUDED.departement,
-                departement_nom = EXCLUDED.departement_nom,
-                region = EXCLUDED.region,
                 population = EXCLUDED.population,
                 updated_at = now()
-        """, (
-            row.get("code_insee", ""),
-            row.get("nom", ""),
-            row.get("departement", ""),
-            row.get("departement_nom", ""),
-            row.get("region", ""),
-            int(row.get("population", 0)),
-        ))
+        """, (code_insee, nom, dep, data['population']))
         inserted += 1
 
     conn.commit()

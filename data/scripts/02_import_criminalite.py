@@ -1,143 +1,148 @@
 """
-Importe les statistiques de délinquance SSMSI par commune.
+Importe les statistiques de délinquance SSMSI depuis le fichier unique CSV.GZ.
 
-Source : https://www.data.gouv.fr/fr/datasets/bases-statistiques-communales-departementales-et-regionales-de-la-delinquance/
-Télécharger le fichier CSV communal (base commune) pour chaque année disponible.
-Placer les fichiers dans : data/raw/ssmsi_XXXX.csv
+Fichier requis dans data/raw/ :
+  - ssmsi_all.csv.gz
 
-Format attendu :
-  CODGEO_2024 | Année | tauxpourmille_indicateur | ... | nb_faits_indicateur
+Colonnes du fichier :
+  CODGEO_2025;annee;indicateur;unite_de_compte;nombre;taux_pour_mille;est_diffuse;
+  insee_pop;insee_pop_millesime;insee_log;insee_log_millesime;
+  complement_info_nombre;complement_info_taux
 """
 import sys
 import os
-import pandas as pd
+import gzip
+import csv
 import psycopg2
 from tqdm import tqdm
-from config import DATABASE_URL, SSMSI_COLUMNS
+from config import DATABASE_URL
 
-RAW_DIR = "../raw"
+RAW_DIR = os.path.join(os.path.dirname(__file__), '../raw')
+SSMSI_FILE = os.path.join(RAW_DIR, 'ssmsi_all.csv.gz')
 
-# Mapping colonnes SSMSI -> indicateur DB
-# Les noms de colonnes changent selon les années — adapter si nécessaire
-TAUX_COLS = {
-    "tauxpourmille_Coups et blessures volontaires": "coups_blessures_volontaires",
-    "tauxpourmille_Vols avec violences": "vols_avec_violence",
-    "tauxpourmille_Vols sans violence contre des personnes": "vols_sans_violence",
-    "tauxpourmille_Cambriolages de logement": "cambriolages_logement",
-    "tauxpourmille_Vols de véhicules": "vols_vehicules",
-    "tauxpourmille_Destructions et dégradations volontaires": "destructions_degradations",
-    "tauxpourmille_Usage de stupéfiants": "stupefiants_usage",
-    "tauxpourmille_Violences sexuelles": "violences_sexuelles",
-    "tauxpourmille_Escroqueries": "escroqueries",
+# Mapping indicateurs SSMSI -> nom en DB
+INDICATEUR_MAP = {
+    'Cambriolages de logement':                    'cambriolages_logement',
+    'Destructions et dégradations volontaires':    'destructions_degradations',
+    'Escroqueries et fraudes aux moyens de paiement': 'escroqueries',
+    'Usage de stupéfiants':                        'stupefiants_usage',
+    'Violences sexuelles':                         'violences_sexuelles',
+    'Vols de véhicule':                            'vols_vehicules',
+    'Vols sans violence contre des personnes':     'vols_sans_violence',
+    # Coups et blessures = physiques hors famille + intrafamiliales
+    'Violences physiques hors cadre familial':     'coups_blessures_volontaires',
+    'Violences physiques intrafamiliales':         'coups_blessures_volontaires',
+    # Vols avec violence = avec armes + sans arme
+    'Vols avec armes':                             'vols_avec_violence',
+    'Vols violents sans arme':                     'vols_avec_violence',
 }
-
-FAITS_COLS = {
-    "faits_Coups et blessures volontaires": "coups_blessures_volontaires",
-    "faits_Vols avec violences": "vols_avec_violence",
-    "faits_Vols sans violence contre des personnes": "vols_sans_violence",
-    "faits_Cambriolages de logement": "cambriolages_logement",
-    "faits_Vols de véhicules": "vols_vehicules",
-    "faits_Destructions et dégradations volontaires": "destructions_degradations",
-    "faits_Usage de stupéfiants": "stupefiants_usage",
-    "faits_Violences sexuelles": "violences_sexuelles",
-    "faits_Escroqueries": "escroqueries",
-}
-
-def find_ssmsi_files():
-    files = []
-    for f in os.listdir(RAW_DIR):
-        if f.startswith("ssmsi_") and f.endswith(".csv"):
-            year = f.replace("ssmsi_", "").replace(".csv", "")
-            if year.isdigit():
-                files.append((int(year), os.path.join(RAW_DIR, f)))
-    return sorted(files)
 
 def get_valid_communes(cur):
     cur.execute("SELECT code_insee FROM communes WHERE population >= 10000")
     return {row[0] for row in cur.fetchall()}
 
-def import_file(cur, year, filepath, valid_communes):
-    print(f"\nImport {year} depuis {filepath}...")
-    df = pd.read_csv(filepath, dtype=str, sep=";", encoding="utf-8")
-    print(f"  {len(df)} lignes, colonnes : {list(df.columns[:5])}...")
-
-    # Identifier la colonne code commune
-    code_col = None
-    for candidate in ["CODGEO_2024", "CODGEO_2023", "CODGEO_2022", "CODGEO", "COG"]:
-        if candidate in df.columns:
-            code_col = candidate
-            break
-    if not code_col:
-        print(f"  ERREUR : colonne code commune introuvable dans {filepath}")
-        return 0
-
-    inserted = 0
-    for _, row in tqdm(df.iterrows(), total=len(df), desc=f"  {year}"):
-        code_insee = str(row[code_col]).strip().zfill(5)
-        if code_insee not in valid_communes:
-            continue
-
-        for col_taux, indicateur in TAUX_COLS.items():
-            valeur_taux = None
-            valeur_brute = None
-
-            # Chercher la colonne taux (noms varient selon années)
-            for c in df.columns:
-                if indicateur in c.lower() or any(k in c for k in [col_taux]):
-                    val = row.get(c)
-                    if pd.notna(val) and str(val).replace(".", "").replace(",", "").isdigit():
-                        valeur_taux = float(str(val).replace(",", "."))
-                        break
-
-            # Chercher la colonne faits bruts
-            for col_faits, ind2 in FAITS_COLS.items():
-                if ind2 == indicateur:
-                    for c in df.columns:
-                        if "faits" in c.lower() and indicateur.replace("_", " ") in c.lower():
-                            val = row.get(c)
-                            if pd.notna(val):
-                                try:
-                                    valeur_brute = int(float(str(val).replace(",", ".")))
-                                except (ValueError, TypeError):
-                                    pass
-                            break
-
-            if valeur_taux is not None:
-                cur.execute("""
-                    INSERT INTO criminalite (code_insee, annee, indicateur, valeur_pour_mille, valeur_brute)
-                    VALUES (%s, %s, %s, %s, %s)
-                    ON CONFLICT (code_insee, annee, indicateur) DO UPDATE SET
-                        valeur_pour_mille = EXCLUDED.valeur_pour_mille,
-                        valeur_brute = EXCLUDED.valeur_brute
-                """, (code_insee, year, indicateur, valeur_taux, valeur_brute))
-                inserted += 1
-
-    return inserted
-
 def main():
-    files = find_ssmsi_files()
-    if not files:
-        print(f"Aucun fichier ssmsi_XXXX.csv trouvé dans {RAW_DIR}/")
-        print("Télécharger depuis : https://www.data.gouv.fr/fr/datasets/bases-statistiques-communales-departementales-et-regionales-de-la-delinquance/")
+    if not os.path.exists(SSMSI_FILE):
+        print(f"ERREUR : {SSMSI_FILE} non trouvé")
         sys.exit(1)
-
-    print(f"Fichiers trouvés : {[f for _, f in files]}")
 
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
     valid_communes = get_valid_communes(cur)
     print(f"{len(valid_communes)} communes valides en base")
 
-    total = 0
-    for year, filepath in files:
-        n = import_file(cur, year, filepath, valid_communes)
-        conn.commit()
-        total += n
-        print(f"  ✓ {n} enregistrements insérés pour {year}")
+    # Compter les lignes pour la barre de progression
+    print("Comptage des lignes...")
+    total_lines = 0
+    with gzip.open(SSMSI_FILE, 'rt', encoding='utf-8') as f:
+        for _ in f:
+            total_lines += 1
+    print(f"  {total_lines:,} lignes à traiter")
 
+    # Pour les indicateurs agrégés (CBV = physiques hors famille + intrafamiliales),
+    # on accumule par (code_insee, annee) avant d'insérer
+    # Structure : {(code_insee, annee, indicateur_db): {taux: float, brut: int}}
+    aggregated = {}
+
+    print("Lecture et agrégation des données SSMSI...")
+    skipped_not_diffuse = 0
+    skipped_no_taux = 0
+    skipped_not_commune = 0
+
+    with gzip.open(SSMSI_FILE, 'rt', encoding='utf-8') as f:
+        reader = csv.DictReader(f, delimiter=';')
+        for i, row in enumerate(tqdm(reader, total=total_lines - 1, desc="Lecture SSMSI")):
+            code = row.get('CODGEO_2025', '').strip().zfill(5)
+            annee_str = row.get('annee', '').strip()
+            indicateur_ssmsi = row.get('indicateur', '').strip()
+            taux_str = row.get('taux_pour_mille', '').strip().replace(',', '.')
+            nombre_str = row.get('nombre', '').strip()
+            est_diffuse = row.get('est_diffuse', '').strip()
+
+            # Filtres
+            if code not in valid_communes:
+                skipped_not_commune += 1
+                continue
+            if est_diffuse != 'diff':
+                skipped_not_diffuse += 1
+                continue
+            if indicateur_ssmsi not in INDICATEUR_MAP:
+                continue
+            if not annee_str.isdigit():
+                continue
+
+            indicateur_db = INDICATEUR_MAP[indicateur_ssmsi]
+
+            taux = None
+            if taux_str and taux_str not in ('', 'NA', 'nan'):
+                try:
+                    taux = float(taux_str)
+                except ValueError:
+                    pass
+
+            brut = None
+            if nombre_str and nombre_str not in ('', 'NA', 'nan'):
+                try:
+                    brut = int(float(nombre_str))
+                except ValueError:
+                    pass
+
+            if taux is None:
+                skipped_no_taux += 1
+                continue
+
+            key = (code, int(annee_str), indicateur_db)
+            if key not in aggregated:
+                aggregated[key] = {'taux': 0.0, 'brut': 0}
+            aggregated[key]['taux'] += taux
+            if brut is not None:
+                aggregated[key]['brut'] += brut
+
+    print(f"\n  Filtrés (pas commune cible) : {skipped_not_commune:,}")
+    print(f"  Filtrés (non diffusés)      : {skipped_not_diffuse:,}")
+    print(f"  Filtrés (taux absent)       : {skipped_no_taux:,}")
+    print(f"  Enregistrements agrégés     : {len(aggregated):,}")
+
+    print("\nInsertion en base de données...")
+    inserted = 0
+    for (code_insee, annee, indicateur_db), vals in tqdm(aggregated.items(), desc="INSERT criminalite"):
+        cur.execute("""
+            INSERT INTO criminalite (code_insee, annee, indicateur, valeur_pour_mille, valeur_brute)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (code_insee, annee, indicateur) DO UPDATE SET
+                valeur_pour_mille = EXCLUDED.valeur_pour_mille,
+                valeur_brute = EXCLUDED.valeur_brute
+        """, (code_insee, annee, indicateur_db, round(vals['taux'], 4), vals['brut']))
+        inserted += 1
+
+        # Commit par batch de 10 000
+        if inserted % 10000 == 0:
+            conn.commit()
+
+    conn.commit()
     cur.close()
     conn.close()
-    print(f"\n✓ Total : {total} enregistrements de criminalité importés")
+    print(f"\n✓ {inserted} enregistrements insérés/mis à jour")
 
 if __name__ == "__main__":
     main()

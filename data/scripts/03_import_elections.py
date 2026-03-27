@@ -1,39 +1,55 @@
 """
-Importe les résultats des élections municipales (2014, 2020).
+Importe les mandats municipaux depuis le fichier nuances politiques + RNE.
 
-Source 2020 : https://www.data.gouv.fr/fr/datasets/elections-municipales-2020-resultats-definitifs-du-1er-tour/
-Source 2014 : https://www.data.gouv.fr/fr/datasets/elections-municipales-2014-resultats-par-bureaux-de-vote/
+Fichiers requis dans data/raw/ :
+  - communes_nuances_2020.csv  (nuances politiques maires 2020)
+  - maires_rne.csv             (RNE maires, noms des maires actuels)
 
-Placer dans data/raw/ :
-  elections_2014.csv
-  elections_2020.csv
-
-Format attendu (colonnes minimales) :
-  CodeInsee | NomCommune | NomMaire | Prénom | Nuance | Date
+Le fichier communes_nuances_2020.csv contient les champs :
+  nom_commune, cog_commune, siren_commune, nuance_politique, famille_nuance
 """
 import sys
-import pandas as pd
+import os
+import csv
 import psycopg2
 from datetime import date
 from tqdm import tqdm
 from config import DATABASE_URL, NUANCE_TO_SIGLE
 
-RAW_DIR = "../raw"
+RAW_DIR = os.path.join(os.path.dirname(__file__), '../raw')
+NUANCES_FILE = os.path.join(RAW_DIR, 'communes_nuances_2020.csv')
+MAIRES_FILE = os.path.join(RAW_DIR, 'maires_rne.csv')
 
-ELECTIONS = [
-    {
-        "file": f"{RAW_DIR}/elections_2014.csv",
-        "date_debut": date(2014, 4, 5),
-        "date_fin": date(2020, 7, 3),
-        "source": "elections_2014",
-    },
-    {
-        "file": f"{RAW_DIR}/elections_2020.csv",
-        "date_debut": date(2020, 7, 4),
-        "date_fin": None,
-        "source": "elections_2020",
-    },
-]
+def load_maires_rne():
+    """Charger le mapping code_commune -> {nom, prenom, date_mandat} depuis le RNE."""
+    maires = {}
+    if not os.path.exists(MAIRES_FILE):
+        print(f"  AVERTISSEMENT : {MAIRES_FILE} non trouvé — noms de maires non disponibles")
+        return maires
+
+    with open(MAIRES_FILE, encoding='utf-8') as f:
+        reader = csv.DictReader(f, delimiter=';')
+        for row in reader:
+            # Colonnes RNE : Code du département; Code de la commune; Nom de l'élu; Prénom de l'élu; Date de début du mandat
+            dep = row.get('Code du département', '').strip().zfill(2)
+            commune = row.get('Code de la commune', '').strip().zfill(3)
+            code_insee = dep + commune
+
+            # Gérer les collectivités particulières (Paris, Lyon, Marseille, etc.)
+            if row.get('Code de la collectivité à statut particulier', '').strip():
+                code_insee = row.get('Code de la collectivité à statut particulier', '').strip() + commune
+
+            nom = row.get("Nom de l'élu", '').strip()
+            prenom = row.get("Prénom de l'élu", '').strip()
+            date_str = row.get('Date de début du mandat', '').strip()
+
+            if code_insee and nom:
+                maires[code_insee] = {
+                    'nom': f"{prenom} {nom}".strip(),
+                    'date_mandat': date_str,
+                }
+    print(f"  {len(maires)} maires chargés depuis le RNE")
+    return maires
 
 def get_parti_id(cur, sigle):
     cur.execute("SELECT id FROM partis WHERE sigle = %s", (sigle,))
@@ -41,87 +57,82 @@ def get_parti_id(cur, sigle):
     return row[0] if row else None
 
 def normalize_nuance(nuance):
-    if not nuance or pd.isna(nuance):
-        return "SE"
-    n = str(nuance).strip().upper()
-    return NUANCE_TO_SIGLE.get(n, "DIV")
+    """Normaliser la nuance SSMSI en sigle de parti."""
+    if not nuance or nuance in ('NC', '', 'Non classé'):
+        return 'SE'
+    # Prendre la première nuance si combinée (ex: "LSOC,LDVG" -> "LSOC")
+    first = nuance.split(',')[0].strip()
+    # Retirer le préfixe L si présent (LSOC -> SOC, LRN -> RN, etc.)
+    # Mais garder LREM, LSOC, etc. tels quels pour le mapping
+    return NUANCE_TO_SIGLE.get(first, NUANCE_TO_SIGLE.get(first.lstrip('L'), 'DIV'))
 
-def import_election(cur, election, valid_communes):
-    filepath = election["file"]
-    try:
-        df = pd.read_csv(filepath, dtype=str, sep=";", encoding="utf-8")
-    except FileNotFoundError:
-        print(f"  Fichier non trouvé : {filepath} — ignoré")
-        return 0
-
-    print(f"\nImport {election['source']} — {len(df)} lignes")
-    print(f"  Colonnes : {list(df.columns[:8])}")
-
-    # Identifier les colonnes (noms varient selon les fichiers)
-    code_col = next((c for c in df.columns if "code" in c.lower() and "insee" in c.lower()), None) or \
-               next((c for c in df.columns if c.upper() in ["CODINSEE", "COG", "CODGEO"]), None)
-    nom_maire_col = next((c for c in df.columns if "nom" in c.lower() and "maire" in c.lower()), None) or \
-                    next((c for c in df.columns if "nom" in c.lower()), None)
-    prenom_col = next((c for c in df.columns if "prenom" in c.lower()), None)
-    nuance_col = next((c for c in df.columns if "nuance" in c.lower()), None)
-
-    if not code_col:
-        print(f"  ERREUR : colonne code INSEE introuvable. Colonnes : {list(df.columns)}")
-        return 0
-
-    # Garder uniquement les maires (élus, rang 1 dans les résultats)
-    # Les fichiers du Ministère ont souvent une colonne "Siège" ou "Rang"
-    siege_col = next((c for c in df.columns if "siege" in c.lower() or "elu" in c.lower()), None)
-    if siege_col:
-        df = df[df[siege_col].astype(str).str.contains("1|maire|oui", case=False, na=False)]
-
-    inserted = 0
-    for _, row in tqdm(df.iterrows(), total=len(df), desc=f"  {election['source']}"):
-        code_insee = str(row.get(code_col, "")).strip().zfill(5)
-        if code_insee not in valid_communes:
-            continue
-
-        nom = str(row.get(nom_maire_col, "")).strip() if nom_maire_col else ""
-        prenom = str(row.get(prenom_col, "")).strip() if prenom_col else ""
-        maire_nom = f"{prenom} {nom}".strip() if prenom else nom
-        nuance = str(row.get(nuance_col, "SE")).strip() if nuance_col else "SE"
-
-        sigle_norm = normalize_nuance(nuance)
-        parti_id = get_parti_id(cur, sigle_norm)
-
-        if not maire_nom:
-            continue
-
-        cur.execute("""
-            INSERT INTO mandats (code_insee, maire_nom, parti_id, nuance_officielle, date_debut, date_fin, source)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT DO NOTHING
-        """, (
-            code_insee, maire_nom, parti_id, nuance,
-            election["date_debut"], election["date_fin"], election["source"]
-        ))
-        inserted += 1
-
-    return inserted
+def get_valid_communes(cur):
+    cur.execute("SELECT code_insee FROM communes WHERE population >= 10000")
+    return {row[0] for row in cur.fetchall()}
 
 def main():
+    if not os.path.exists(NUANCES_FILE):
+        print(f"ERREUR : {NUANCES_FILE} non trouvé")
+        sys.exit(1)
+
+    maires = load_maires_rne()
+
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
 
-    cur.execute("SELECT code_insee FROM communes WHERE population >= 10000")
-    valid_communes = {row[0] for row in cur.fetchall()}
+    valid_communes = get_valid_communes(cur)
     print(f"{len(valid_communes)} communes valides en base")
 
-    total = 0
-    for election in ELECTIONS:
-        n = import_election(cur, election, valid_communes)
-        conn.commit()
-        total += n
-        print(f"  ✓ {n} mandats insérés pour {election['source']}")
+    # Supprimer les mandats existants pour réimport propre
+    cur.execute("DELETE FROM mandats WHERE source = 'elections_2020'")
+    conn.commit()
 
+    inserted = 0
+    skipped = 0
+
+    with open(NUANCES_FILE, encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+
+    for row in tqdm(rows, desc="Import mandats 2020"):
+        code_insee = row.get('cog_commune', '').strip().zfill(5)
+        if code_insee not in valid_communes:
+            skipped += 1
+            continue
+
+        nuance = row.get('nuance_politique', '').strip()
+        sigle_norm = normalize_nuance(nuance)
+        parti_id = get_parti_id(cur, sigle_norm)
+
+        maire_info = maires.get(code_insee, {})
+        maire_nom = maire_info.get('nom', 'Inconnu')
+
+        # Date de début du mandat 2020
+        date_mandat_str = maire_info.get('date_mandat', '')
+        try:
+            if date_mandat_str:
+                parts = date_mandat_str.split('/')
+                if len(parts) == 3:
+                    date_debut = date(int(parts[2]), int(parts[1]), int(parts[0]))
+                else:
+                    date_debut = date(2020, 7, 4)
+            else:
+                date_debut = date(2020, 7, 4)
+        except (ValueError, IndexError):
+            date_debut = date(2020, 7, 4)
+
+        cur.execute("""
+            INSERT INTO mandats (code_insee, maire_nom, parti_id, nuance_officielle, date_debut, date_fin, source)
+            VALUES (%s, %s, %s, %s, %s, NULL, 'elections_2020')
+            ON CONFLICT DO NOTHING
+        """, (code_insee, maire_nom, parti_id, nuance, date_debut))
+        inserted += 1
+
+    conn.commit()
     cur.close()
     conn.close()
-    print(f"\n✓ Total : {total} mandats importés")
+    print(f"\n✓ {inserted} mandats insérés (2020)")
+    print(f"  {skipped} communes ignorées (population < 10 000)")
 
 if __name__ == "__main__":
     main()

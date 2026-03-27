@@ -1,38 +1,47 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), '../../.env'))
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 
-# Mapping nuances officielles Ministère de l'Intérieur -> sigle normalisé
+# Mapping nuances politiques (fichier communes_nuances_2020.csv) -> sigle en DB
+# Format : LSOC, LRN, LDVG, etc.
 NUANCE_TO_SIGLE = {
     # Gauche
-    "DVG": "DVG", "PS": "PS", "PRG": "DVG", "VEC": "EELV", "ECO": "EELV",
-    "COM": "PCF", "FG": "PCF", "FI": "LFI", "LFI": "LFI", "UG": "DVG",
+    'LSOC': 'PS',      # Socialiste
+    'LUG':  'DVG',     # Union de la Gauche
+    'LDVG': 'DVG',     # Divers Gauche
+    'LCOM': 'PCF',     # Communiste
+    'LRDG': 'DVG',     # Radical de Gauche
+    'LVEC': 'EELV',    # Verts / Écologistes
+    'LECO': 'EELV',    # Écologistes
+    'LFI':  'LFI',     # France Insoumise
     # Centre
-    "LREM": "LREM", "REM": "LREM", "REN": "REN", "ENS": "REN",
-    "MDM": "MDM", "UDI": "UDI", "UC": "UDI", "AJ": "REN",
+    'LREM': 'LREM',    # La République En Marche
+    'LMDM': 'MDM',     # MoDem
+    'LUC':  'UDI',     # Union du Centre
+    'LUDI': 'UDI',     # UDI
+    'LDVC': 'DVC',     # Divers Centre
     # Droite
-    "DVD": "DVD", "LR": "LR", "UMP": "LR", "RPR": "LR",
+    'LLR':  'LR',      # Les Républicains
+    'LUD':  'LR',      # Union pour la Droite
+    'LDVD': 'DVD',     # Divers Droite
     # Extrême droite
-    "RN": "RN", "FN": "RN", "DLF": "RN",
-    # Extrême gauche
-    "EXG": "PCF", "LO": "PCF", "NPA": "LFI",
+    'LRN':  'RN',      # Rassemblement National
+    'LEXD': 'RN',      # Extrême Droite
     # Divers
-    "SE": "SE", "DIV": "DIV", "REG": "DIV", "DLN": "DIV",
-    "GJ": "DIV", "REC": "DIV",
-}
-
-# Indicateurs SSMSI -> nom colonne en DB
-SSMSI_COLUMNS = {
-    "Coups et blessures volontaires": "coups_blessures_volontaires",
-    "Vols avec violences": "vols_avec_violence",
-    "Vols sans violence contre des personnes": "vols_sans_violence",
-    "Cambriolages de logement": "cambriolages_logement",
-    "Vols de véhicules": "vols_vehicules",
-    "Destructions et dégradations volontaires": "destructions_degradations",
-    "Usage de stupéfiants": "stupefiants_usage",
-    "Violences sexuelles": "violences_sexuelles",
-    "Escroqueries": "escroqueries",
+    'LDIV': 'DIV',     # Divers
+    'LREG': 'DIV',     # Régionaliste
+    'LNC':  'SE',      # Non Classé
+    'NC':   'SE',      # Non Classé
+    # Anciens formats (résultats élections 2014)
+    'DVG': 'DVG', 'PS': 'PS', 'PRG': 'DVG', 'VEC': 'EELV', 'ECO': 'EELV',
+    'COM': 'PCF', 'FG': 'PCF', 'UG': 'DVG',
+    'LREM_old': 'LREM', 'REM': 'LREM', 'REN': 'REN', 'ENS': 'REN',
+    'MDM': 'MDM', 'UDI': 'UDI', 'UC': 'UDI',
+    'DVD': 'DVD', 'LR': 'LR', 'UMP': 'LR',
+    'RN': 'RN', 'FN': 'RN', 'DLF': 'RN',
+    'EXG': 'PCF', 'LO': 'PCF', 'NPA': 'LFI',
+    'SE': 'SE', 'DIV': 'DIV', 'REG': 'DIV',
 }
