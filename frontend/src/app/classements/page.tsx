@@ -8,9 +8,10 @@ export const metadata = {
 export default async function ClassementsPage({
   searchParams,
 }: {
-  searchParams: { indicateur?: string };
+  searchParams: Promise<{ indicateur?: string }>;
 }) {
-  const indicateur = searchParams.indicateur || 'coups_blessures_volontaires';
+  const params = await searchParams;
+  const indicateur = params.indicateur || 'coups_blessures_volontaires';
 
   const [hausseData, baisseData, famillesData] = await Promise.allSettled([
     fetchClassement('hausse', indicateur),

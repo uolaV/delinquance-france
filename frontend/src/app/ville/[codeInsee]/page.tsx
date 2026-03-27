@@ -3,9 +3,10 @@ import Link from 'next/link';
 import { fetchCommune, INDICATEURS } from '../../../lib/api';
 import CriminaliteChart from '../../../components/commune/CriminaliteChart';
 
-export async function generateMetadata({ params }: { params: { codeInsee: string } }) {
+export async function generateMetadata({ params }: { params: Promise<{ codeInsee: string }> }) {
   try {
-    const data = await fetchCommune(params.codeInsee);
+    const { codeInsee } = await params;
+    const data = await fetchCommune(codeInsee);
     return {
       title: `${data.commune.nom} — Délinquance France`,
       description: `Statistiques de délinquance à ${data.commune.nom} depuis 2012.`,
@@ -15,10 +16,11 @@ export async function generateMetadata({ params }: { params: { codeInsee: string
   }
 }
 
-export default async function VillePage({ params }: { params: { codeInsee: string } }) {
+export default async function VillePage({ params }: { params: Promise<{ codeInsee: string }> }) {
   let data: any;
+  const { codeInsee } = await params;
   try {
-    data = await fetchCommune(params.codeInsee);
+    data = await fetchCommune(codeInsee);
   } catch {
     notFound();
   }

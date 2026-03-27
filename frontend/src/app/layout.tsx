@@ -68,24 +68,7 @@ function Navbar() {
             { href: '/partis', label: 'Par parti', icon: '🏛' },
             { href: '/sources', label: 'Sources', icon: '📋' },
           ].map(({ href, label, icon }) => (
-            <Link key={href} href={href} style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '6px 12px',
-              borderRadius: 8,
-              fontSize: '0.875rem',
-              fontWeight: 500,
-              color: 'var(--text-secondary)',
-              transition: 'all 0.15s ease',
-              textDecoration: 'none',
-            }}
-            onMouseEnter={e => {
-              (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)';
-              (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)';
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)';
-              (e.currentTarget as HTMLElement).style.background = 'transparent';
-            }}>
+            <Link key={href} href={href} className="nav-link">
               <span style={{ fontSize: 14 }}>{icon}</span>
               {label}
             </Link>
@@ -139,14 +122,7 @@ function Footer() {
                 ['/classements', 'Classements'],
                 ['/partis', 'Par parti politique'],
               ].map(([href, label]) => (
-                <Link key={href} href={href} style={{
-                  fontSize: '0.8125rem',
-                  color: 'var(--text-secondary)',
-                  textDecoration: 'none',
-                  transition: 'color 0.15s',
-                }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)'}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'}>
+                <Link key={href} href={href} className="footer-link">
                   {label}
                 </Link>
               ))}
@@ -162,14 +138,7 @@ function Footer() {
                 ['https://www.data.gouv.fr/fr/datasets/bases-statistiques-communales-departementales-et-regionales-de-la-delinquance/', 'SSMSI — Statistiques délinquance'],
                 ['https://www.data.gouv.fr/datasets/repertoire-national-des-elus-1/', 'RNE — Élus municipaux'],
               ].map(([href, label]) => (
-                <a key={href} href={href} target="_blank" rel="noopener noreferrer" style={{
-                  fontSize: '0.8125rem',
-                  color: 'var(--text-secondary)',
-                  textDecoration: 'none',
-                  transition: 'color 0.15s',
-                }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--accent-hover)'}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'}>
+                <a key={href} href={href} target="_blank" rel="noopener noreferrer" className="footer-link-ext">
                   {label} ↗
                 </a>
               ))}

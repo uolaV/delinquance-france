@@ -262,6 +262,51 @@ body {
   border-radius: inherit;
 }
 
+/* ─── Nav / Footer links ──────────────────────────────────────────────────── */
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+.nav-link:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.footer-link {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.footer-link:hover { color: var(--text-primary); }
+
+.footer-link-ext {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.footer-link-ext:hover { color: var(--accent-hover); }
+
+/* ─── Classement link ─────────────────────────────────────────────────────── */
+.classement-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  text-decoration: none;
+  transition: background 0.1s;
+}
+.classement-row:hover { background: var(--bg-hover); }
+
 /* ─── Animate ─────────────────────────────────────────────────────────────── */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(12px); }

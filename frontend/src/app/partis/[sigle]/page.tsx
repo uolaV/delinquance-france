@@ -2,10 +2,11 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { fetchParti, INDICATEURS } from '../../../lib/api';
 
-export default async function PartiPage({ params }: { params: { sigle: string } }) {
+export default async function PartiPage({ params }: { params: Promise<{ sigle: string }> }) {
   let data: any;
   try {
-    data = await fetchParti(params.sigle);
+    const { sigle } = await params;
+  data = await fetchParti(sigle);
   } catch {
     notFound();
   }

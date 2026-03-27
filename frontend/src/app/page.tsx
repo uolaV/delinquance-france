@@ -241,15 +241,10 @@ function ClassementCard({ title, data, sens }: { title: string; data: any[]; sen
             <Link
               key={c.code_insee}
               href={`/ville/${c.code_insee}`}
+              className="classement-row"
               style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                padding: '12px 20px',
                 borderBottom: i < data.length - 1 ? '1px solid var(--border)' : 'none',
-                textDecoration: 'none',
-                transition: 'background 0.1s',
               }}
-              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)'}
-              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
             >
               <span style={{
                 width: 22, height: 22,
