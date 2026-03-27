@@ -3,16 +3,57 @@ import Link from 'next/link';
 import { fetchCommune, INDICATEURS } from '../../../lib/api';
 import CriminaliteChart from '../../../components/commune/CriminaliteChart';
 
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://delinquance.fr';
+
 export async function generateMetadata({ params }: { params: Promise<{ codeInsee: string }> }) {
   try {
     const { codeInsee } = await params;
     const data = await fetchCommune(codeInsee);
+    const { commune, evolutions } = data;
+
+    // Trouver l'évolution CBV pour la description
+    const cbvEvo = data.criminalite
+      ?.filter((c: any) => c.indicateur === 'coups_blessures_volontaires')
+      ?.sort((a: any, b: any) => b.annee - a.annee)?.[0];
+
+    const anneeMax = data.annees?.annee_max || 2025;
+    const pop = commune.population ? `${(commune.population / 1000).toFixed(0)}k habitants` : '';
+    const parti = commune.parti_nom ? ` Mairie ${commune.parti_nom}.` : '';
+
+    const description =
+      `Statistiques de délinquance à ${commune.nom} (${pop}). ` +
+      `Taux de criminalité 2016–${anneeMax}, évolution par indicateur SSMSI.${parti} ` +
+      `Cambriolages, coups et blessures, vols, stupéfiants.`;
+
     return {
-      title: `${data.commune.nom} — Délinquance France`,
-      description: `Statistiques de délinquance à ${data.commune.nom} depuis 2012.`,
+      title: `Délinquance à ${commune.nom} — Taux et évolution ${anneeMax}`,
+      description,
+      keywords: [
+        `délinquance ${commune.nom}`,
+        `criminalité ${commune.nom}`,
+        `statistiques ${commune.nom}`,
+        `taux criminalité ${commune.nom}`,
+        `sécurité ${commune.nom}`,
+        `cambriolages ${commune.nom}`,
+        `${commune.nom} ${commune.departement}`,
+      ],
+      openGraph: {
+        title: `Délinquance à ${commune.nom} — Statistiques ${anneeMax}`,
+        description,
+        url: `${BASE_URL}/ville/${codeInsee}`,
+        type: 'article',
+      },
+      twitter: {
+        card: 'summary',
+        title: `Délinquance à ${commune.nom}`,
+        description: `Taux de criminalité et évolution sur 5 ans à ${commune.nom}. Données SSMSI officielles.`,
+      },
+      alternates: {
+        canonical: `${BASE_URL}/ville/${codeInsee}`,
+      },
     };
   } catch {
-    return { title: 'Commune — Délinquance France' };
+    return { title: 'Commune — Statistiques délinquance' };
   }
 }
 
@@ -36,16 +77,51 @@ export default async function VillePage({ params }: { params: Promise<{ codeInse
   // Evolution sur tous les indicateurs
   const evolutionGlobale = computeEvolutionGlobale(criminalite);
 
+  const derniereAnnee = annees[annees.length - 1];
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Dataset',
+    name: `Statistiques de délinquance — ${commune.nom}`,
+    description: `Données officielles de délinquance à ${commune.nom} (${commune.departement}). Source : SSMSI / data.gouv.fr. Période : ${annees[0]}–${derniereAnnee}.`,
+    url: `${BASE_URL}/ville/${codeInsee}`,
+    keywords: ['délinquance', 'criminalité', commune.nom, 'SSMSI', 'France'],
+    creator: { '@type': 'Organization', name: 'DélinquanceFR' },
+    temporalCoverage: `${annees[0]}/${derniereAnnee}`,
+    spatialCoverage: {
+      '@type': 'Place',
+      name: commune.nom,
+      containedInPlace: { '@type': 'AdministrativeArea', name: `Département ${commune.departement}` },
+    },
+    license: 'https://www.etalab.gouv.fr/licence-ouverte-open-licence',
+    includedInDataCatalog: {
+      '@type': 'DataCatalog',
+      name: 'SSMSI — data.gouv.fr',
+      url: 'https://www.data.gouv.fr/fr/datasets/bases-statistiques-communales-departementales-et-regionales-de-la-delinquance/',
+    },
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-6 py-10">
-      {/* Breadcrumb */}
-      <p className="text-sm text-[var(--text-muted)] mb-6">
-        <Link href="/" className="hover:text-white">Accueil</Link>
-        {' / '}
-        {commune.departement_nom || commune.departement}
-        {' / '}
-        <span className="text-white">{commune.nom}</span>
-      </p>
+      {/* JSON-LD */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+
+      {/* Breadcrumb sémantique */}
+      <nav aria-label="Fil d'Ariane" style={{ marginBottom: 24 }}>
+        <ol style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8125rem', color: 'var(--text-muted)', listStyle: 'none', padding: 0, margin: 0 }}>
+          <li><Link href="/" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Accueil</Link></li>
+          <li style={{ opacity: 0.4 }}>/</li>
+          <li>
+            <Link href="/classements" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>
+              {commune.departement_nom || `Dép. ${commune.departement}`}
+            </Link>
+          </li>
+          <li style={{ opacity: 0.4 }}>/</li>
+          <li style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{commune.nom}</li>
+        </ol>
+      </nav>
 
       {/* Header */}
       <div className="flex items-start gap-6 mb-10">

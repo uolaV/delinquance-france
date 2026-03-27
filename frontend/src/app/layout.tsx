@@ -3,18 +3,43 @@ import Link from 'next/link';
 import './globals.css';
 import 'leaflet/dist/leaflet.css';
 
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://delinquance.fr';
+
 export const metadata: Metadata = {
+  metadataBase: new URL(BASE_URL),
   title: {
-    default: 'Délinquance France — Statistiques par commune',
+    default: 'Délinquance France — Statistiques de criminalité par commune',
     template: '%s — Délinquance France',
   },
-  description: 'Statistiques de délinquance par commune et parti politique en France. Données publiques SSMSI 2016–2025.',
-  keywords: ['criminalité', 'délinquance', 'statistiques', 'communes', 'France', 'SSMSI'],
+  description: 'Statistiques officielles de délinquance par commune et parti politique en France. Données SSMSI 2016–2025. Taux de criminalité, évolution, comparaison nationale.',
+  keywords: [
+    'délinquance France', 'criminalité commune', 'statistiques délinquance',
+    'taux criminalité ville', 'sécurité commune France', 'SSMSI',
+    'délinquance parti politique', 'cambriolages France', 'vols commune',
+  ],
+  authors: [{ name: 'DélinquanceFR' }],
+  creator: 'DélinquanceFR',
+  publisher: 'DélinquanceFR',
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, 'max-snippet': -1, 'max-image-preview': 'large' },
+  },
   openGraph: {
-    title: 'Délinquance France',
-    description: 'Statistiques de délinquance par commune et parti politique en France.',
+    title: 'Délinquance France — Statistiques par commune',
+    description: 'Taux de criminalité, évolution sur 5 ans et parti politique pour 1 106 communes françaises. Données publiques SSMSI.',
     locale: 'fr_FR',
     type: 'website',
+    siteName: 'DélinquanceFR',
+    url: BASE_URL,
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Délinquance France — Statistiques par commune',
+    description: 'Taux de criminalité et évolution pour 1 106 communes françaises. Données SSMSI officielles.',
+  },
+  alternates: {
+    canonical: BASE_URL,
   },
 };
 

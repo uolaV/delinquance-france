@@ -1,7 +1,15 @@
 import Link from 'next/link';
 import { fetchPartis } from '../../lib/api';
 
-export const metadata = { title: 'Partis politiques — Délinquance France' };
+export const metadata = {
+  title: 'Délinquance par parti politique — Comparaison des familles politiques',
+  description: 'Évolution de la délinquance dans les villes dirigées par chaque parti politique. Comparaison PS, LR, RN, Renaissance, EELV. Données SSMSI officielles. Aucun jugement de causalité.',
+  keywords: ['délinquance parti politique', 'criminalité maire', 'sécurité gauche droite', 'statistiques délinquance partis'],
+  openGraph: {
+    title: 'Délinquance par parti politique en France',
+    description: 'Taux et évolution de la criminalité selon le parti du maire. Données publiques SSMSI.',
+  },
+};
 
 export default async function PartisPage() {
   let partis: any[] = [];

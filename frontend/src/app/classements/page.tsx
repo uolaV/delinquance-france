@@ -2,7 +2,13 @@ import Link from 'next/link';
 import { fetchClassement, fetchClassementFamilles, INDICATEURS } from '../../lib/api';
 
 export const metadata = {
-  title: 'Classements — Délinquance France',
+  title: 'Classements — Villes avec la plus forte hausse et baisse de criminalité',
+  description: 'Classement des communes françaises par évolution de la délinquance sur 5 ans. Quelle ville a la plus forte hausse de criminalité ? Par indicateur SSMSI et famille politique.',
+  keywords: ['classement criminalité France', 'villes dangereuses France', 'hausse délinquance commune', 'baisse criminalité ville'],
+  openGraph: {
+    title: 'Classements — Hausse et baisse de criminalité par commune',
+    description: 'Top 20 des communes françaises avec la plus forte hausse et baisse de délinquance sur 5 ans.',
+  },
 };
 
 export default async function ClassementsPage({

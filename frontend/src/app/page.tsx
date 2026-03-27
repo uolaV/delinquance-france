@@ -12,8 +12,43 @@ export default async function HomePage() {
   const hausse = hausseData.status === 'fulfilled' ? hausseData.value.data?.slice(0, 5) : [];
   const baisse = baisseData.status === 'fulfilled' ? baisseData.value.data?.slice(0, 5) : [];
 
+  const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://delinquance.fr';
+  const jsonLdWebsite = {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'DélinquanceFR',
+    url: BASE_URL,
+    description: 'Statistiques officielles de délinquance par commune et parti politique en France. Données SSMSI 2016–2025.',
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: { '@type': 'EntryPoint', urlTemplate: `${BASE_URL}/carte?q={search_term_string}` },
+      'query-input': 'required name=search_term_string',
+    },
+    publisher: { '@type': 'Organization', name: 'DélinquanceFR', url: BASE_URL },
+  };
+
+  const jsonLdDataset = {
+    '@context': 'https://schema.org',
+    '@type': 'Dataset',
+    name: 'Statistiques de délinquance par commune — France',
+    description: 'Base de données des statistiques de délinquance pour 1 106 communes françaises de plus de 10 000 habitants, croisées avec les mandats municipaux. Source officielle SSMSI / data.gouv.fr.',
+    url: BASE_URL,
+    keywords: ['délinquance France', 'criminalité communes', 'statistiques SSMSI', 'sécurité villes'],
+    temporalCoverage: '2016/2025',
+    spatialCoverage: { '@type': 'Place', name: 'France' },
+    license: 'https://www.etalab.gouv.fr/licence-ouverte-open-licence',
+    creator: { '@type': 'Organization', name: 'DélinquanceFR', url: BASE_URL },
+    includedInDataCatalog: {
+      '@type': 'DataCatalog',
+      name: 'SSMSI — data.gouv.fr',
+      url: 'https://www.data.gouv.fr/fr/datasets/bases-statistiques-communales-departementales-et-regionales-de-la-delinquance/',
+    },
+  };
+
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdWebsite) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdDataset) }} />
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <section style={{
         position: 'relative',
