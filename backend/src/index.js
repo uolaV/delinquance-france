@@ -5,6 +5,7 @@ import communesRoutes from './routes/communes.js';
 import criminaliteRoutes from './routes/criminalite.js';
 import partisRoutes from './routes/partis.js';
 import classementsRoutes from './routes/classements.js';
+import mapRoutes from './routes/map.js';
 
 const fastify = Fastify({ logger: true });
 
@@ -22,6 +23,7 @@ await fastify.register(communesRoutes);
 await fastify.register(criminaliteRoutes);
 await fastify.register(partisRoutes);
 await fastify.register(classementsRoutes);
+await fastify.register(mapRoutes);
 
 // Error handler
 fastify.setErrorHandler((error, _request, reply) => {

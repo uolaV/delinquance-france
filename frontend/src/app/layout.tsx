@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import 'leaflet/dist/leaflet.css';
 
 export const metadata: Metadata = {
   title: 'Délinquance France — Statistiques par commune',
@@ -15,6 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             Délinquance <span className="text-blue-400">France</span>
           </a>
           <div className="flex gap-6 text-sm text-[var(--text-muted)]">
+            <a href="/carte" className="hover:text-white transition-colors">🗺 Carte</a>
             <a href="/classements" className="hover:text-white transition-colors">Classements</a>
             <a href="/partis" className="hover:text-white transition-colors">Par parti</a>
             <a href="/sources" className="hover:text-white transition-colors">Sources</a>

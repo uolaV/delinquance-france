@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000',
   },
+  // leaflet imports CSS statique
+  transpilePackages: ['leaflet', 'react-leaflet'],
 };
 
 export default nextConfig;
