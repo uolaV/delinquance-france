@@ -1,26 +1,39 @@
 import dynamic from 'next/dynamic';
+import type { Metadata } from 'next';
 
-export const metadata = {
-  title: 'Carte interactive — Délinquance France',
-  description: 'Carte interactive de la délinquance par commune en France depuis 2016.',
+export const metadata: Metadata = {
+  title: 'Carte interactive',
+  description: 'Carte interactive de la délinquance par commune en France. Évolution sur 5 ans, parti politique, 9 indicateurs SSMSI.',
 };
 
-// Leaflet ne supporte pas le SSR — import dynamique client-only
 const CarteLeaflet = dynamic(
   () => import('../../components/map/CarteLeaflet'),
-  { ssr: false, loading: () => (
-    <div className="flex items-center justify-center w-full h-full bg-[#0f1117]">
-      <div className="text-center">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-        <p className="text-sm text-[#7b8099]">Chargement de la carte...</p>
+  {
+    ssr: false,
+    loading: () => (
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        width: '100%', height: '100%',
+        background: 'var(--bg-base)',
+        flexDirection: 'column', gap: 16,
+      }}>
+        <div style={{
+          width: 40, height: 40,
+          border: '2px solid var(--border)',
+          borderTopColor: 'var(--accent)',
+          borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite',
+        }} />
+        <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Chargement de la carte…</p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
-    </div>
-  )}
+    )
+  }
 );
 
 export default function CartePage() {
   return (
-    <div style={{ height: 'calc(100vh - 57px)', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ height: 'calc(100vh - 65px)', position: 'relative', overflow: 'hidden' }}>
       <CarteLeaflet />
     </div>
   );
